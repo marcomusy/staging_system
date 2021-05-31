@@ -76,7 +76,7 @@ def fit_limb(limb):
 
     global ncalls, prev_score, pmin
 
-    ###############
+    # -------------------------------------------------------------
     def func(pars):
 
         global ncalls, prev_score, pmin, ln_output
@@ -86,30 +86,30 @@ def fit_limb(limb):
         ln = limb.Line.clone(transformed=True).c('k3').lw(5)
         ln.rotateZ(pars[3], locally=True).shift(pars[0], pars[1], pars[2])
         cpts = np.array([mesh.closestPoint(p) for p in ln.points()])
-        lpts = np.array([ln.closestPoint(p)   for p in cpts]) # go back and forth
+        # d = ln.points() - cpts
+        lpts = np.array([ln.closestPoint(p) for p in cpts]) # go back and forth
         d = cpts - lpts
 
         age_z = limb.age + pars[2]/zscale
-        x = linInterpolate(age_z, [averages_times[0], averages_times[-1]], [0,1])
+        t0, t1 = averages_times[0], averages_times[-1]
+        x = linInterpolate(age_z, [t0,t1], [0,1])
         gr_factor = growth.eval(x)[1]
 
-        score = np.sum(mag2(d)) / gr_factor / ln.N() #*1000/ gr_factor
+        score = np.sum(mag2(d)) / gr_factor / ln.N()
         ln_output = ln
-        # print(d)
-        # print(d*d)
-        # exit()
 
         if score < prev_score or viz:
             prev_score = score
             minplot_data.append([ncalls, score])
 
-            # --------- visualization:
+            # visualization:
             if (len(minplot_data) > 1 and score < minplot_data[-2][1]*0.95)  or viz:
                 pmin = None
-                if ncalls>9:
+                if ncalls>1:
                     pmin = plot(minplot_data,
-                                xtitle='#calls', ytitle='\epsilon',
+                                xtitle='calls', ytitle='fit score',
                                 lc='lb',
+                                xlim=(0, 100),
                                 ylim=(0, minplot_data[0][1]*1.1),
                                 aspect=16/9,
                                 axes=dict(xyGridColor='k4',
@@ -121,38 +121,38 @@ def fit_limb(limb):
                                           hTitleSize=0.04,
                                 ),
                     )
-                    pmin += DashedLine([0,15/gr_factor], [ncalls*1.1,15/gr_factor],
-                                        c='r', lw=1, spacing=0.3)
-                    pmin.rotateX(60, locally=True).scale(180/ncalls).pos(250,200,249*zscale)
+                    pmin += DashedLine([0, 0.1], [100, 0.1], c='r', lw=1, spacing=0.3)
+                    pmin.rotateX(60, locally=True).scale(2).pos(225,200,t0*zscale)
 
-                dage = precision(ln.z()/zscale, 2, vrange=20)+" h"
+                dage = precision(ln.z()/zscale, 2, vrange=20)+"h"
                 pscale = "1.0 (fixed)"
                 if len(pars)>4: pscale = precision(pars[4], 4)
                 msg = ( "----  Fit parameters: ----"+
-                        "\nCall #"+str(ncalls)+
-                        "\nage = "+precision(age_z, 4)+" h, \Delta= "+dage+
+                        "\nCall # "+str(ncalls)+
+                        "\nage  : "+precision(age_z, 4)+"h, \Delta = "+dage+
                         "\nshift: "+precision(pars[:2], 2, 50)+
                         "\nangle: "+precision(pars[3], 2)+"\circ"+
                         "\nscale: "+pscale+
-                        "\n\epsilon = "+precision(score, 3)+
-                        "\n-------------------------"
+                        "\nscore: "+precision(score, 3)
                 )
                 plt.clear().show(averages, mesh, ln, *outlines, t2dl.text(msg), t2dr, tinf, pmin,
                                  axs, resetcam=False, interactive=False)
-                # if plt.escaped: # ESC was pressed
-                #     plt.close()
-                #     exit(0)
-                if vd: vd.addFrame().pause(0.1)
+                if plt.escaped: # ESC was pressed
+                    plt.close()
+                    exit(0)
                 if viz: # make the line flash in white
-                    ln.c('w').lw(7); plt.render()
+                    if vd: vd.addFrame().pause(0.1)
+                    ln.c('w').lw(7)
+                    plt.render()
                     if vd: vd.addFrame().pause(0.1)
                     time.sleep(0.1)
-                    ln.c('k3').lw(5); plt.render()
+                    ln.c('k3').lw(5)
+                    plt.render()
                     if vd: vd.addFrame().pause(0.1)
 
         return score
 
-    # ----------------
+    # ----------------------------------------------------------------
     limb.Line.transformWithLandmarks(limb.Line,
                                      averages[limb.ageIndex].clone().z(limb.age*zscale),
                                      rigid=True)
@@ -181,22 +181,24 @@ def fit_limb(limb):
 # ##################################################################### FIT LOOP
 vd = None # Video('slidingline.mp4')
 pcloud, pcloud_cols, pcloud_ages, pcloud_scores = [],[],[],[]
-t2dl = Text2D(font="VictorMono", c='k1', pos='top-left', s=0.8)
-t2dr = Text2D(font="Calco", pos='top-right', c='w', s=1.05)
+t2dl = Text2D(pos='top-left', font="VictorMono", c='k1', s=0.8)
+t2dr = Text2D(pos='top-right', font="Calco", c='w', s=1.05)
 
 outlines = []
-for i in range(110,len(limbs)):
+for i in range(0,len(limbs)):
     limb = limbs[i]
-    limb.Line = Spline(limb.datapoints, res=200)
-    limb.ageIndex = stages.index(limb.ageAsString.replace("E",""))
+
     current_limb_age = limb.ageAsString
     if skip == current_limb_age:
         continue
 
+    limb.Line = Spline(limb.datapoints, res=200)
+    limb.ageIndex = stages.index(limb.ageAsString.replace("E",""))
+
     col = getColor(limb.ageIndex)
     printc(i, "LIMB:", limb.ageAsString, str(limb.age)+'h', c=col, invert=1, end=' ')
 
-    score = fit_limb(limb)
+    score = fit_limb(limb)  ### FIT
 
     limb.Line.c(col)
     limb.Line.info['score'] = score
